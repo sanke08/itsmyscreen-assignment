@@ -1,36 +1,107 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ItsMyScreen Polls
 
-## Getting Started
+A production-ready, real-time polling web application built with Next.js, Prisma, and Supabase.
 
-First, run the development server:
+## 🚀 Tech Stack
 
+- **Framework**: Next.js 16 (App Router)
+- **Database**: PostgreSQL (hosted on Supabase)
+- **ORM**: Prisma
+- **Real-time**: Supabase Realtime Subscriptions
+- **UI Components**: Shadcn UI + Tailwind CSS 4
+- **Auth**: Manual JWT-based Session Management (HTTP-only cookies)
+- **Validation**: Zod
+
+---
+
+## 🛠️ Setup Instructions
+
+### 1. Clone & Install
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/sanke08/itsmyscreen-assignment.git
+cd itsmyscreen-assignment
+pnpm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Environment Variables
+Create a `.env` file in the root directory:
+```env
+# Database URLs (Supabase)
+DATABASE_URL="postgresql://postgres.[YOUR-PROJECT-ID]:[PASSWORD]@aws-0-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
+DIRECT_URL="postgresql://postgres.[YOUR-PROJECT-ID]:[PASSWORD]@aws-0-us-east-1.pooler.supabase.com:5432/postgres"
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+# Supabase Realtime
+NEXT_PUBLIC_SUPABASE_URL="https://[YOUR-PROJECT-ID].supabase.co"
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="your-anon-key"
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# Auth
+JWT_SECRET="your-super-secret-key"
+```
 
-## Learn More
+### 3. Database Migration
+```bash
+pnpm prisma migrate dev --name init
+npx prisma generate
+```
 
-To learn more about Next.js, take a look at the following resources:
+### 4. Supabase Setup (CRITICAL)
+For real-time updates to work, you MUST enable replication for the `Vote` table in your Supabase Dashboard:
+1. Go to **Database** > **Replication**.
+2. Click on **supabase_realtime** publication.
+3. Toggle the **Vote** table to enabled.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Alternatively, run this in the SQL Editor:
+```sql
+alter publication supabase_realtime add table "Vote";
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 5. Run Locally
+```bash
+pnpm dev
+```
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 🛡️ Anti-Abuse Mechanisms (3 Layers)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+To ensure fairness without requiring mandatory logins for voters, we implemented three layers of protection:
+
+1.  **Layer 1: HTTP-Only Cookies (Soft Check)**
+    - Sets a `voted_[pollId]` cookie valid for 1 year upon voting.
+    - Provides instant blocking before hitting the database.
+2.  **Layer 2: IP Hashing (Hard Check)**
+    - Extracts voter IP (via `x-forwarded-for`) and stores a SHA-256 hash.
+    - Prevents multiple votes from the same network/location.
+3.  **Layer 3: Browser Fingerprinting (Hard Check)**
+    - Combines `userAgent`, `timezone`, and `screenSize` into a unique device hash.
+    - Prevents users from switching browsers or using VPNs on the same device to re-vote.
+
+---
+
+## 🧩 Edge Cases Handled
+
+- **Real-time Optimistic Updates**: UI updates instantly via Supabase subscriptions, but the client also performs lightweight local increments to reduce percibed latency.
+- **Race Conditions**: Database-level unique constraints (`@@unique([pollId, ipHash])`) prevent duplicate entries if two requests arrive simultaneously.
+- **Form Validation**: Strict server-side Zod validation for poll creation (min 2 options, unique options, min 5 char question).
+- **Unauthorized Access**: Middleware protects `/dashboard` and `/create`, redirecting unauthenticated users to `/login`.
+- **Invalid Polls**: Graceful 404 handling for non-existent poll IDs.
+
+---
+
+## ⚠️ Known Limitations & Future Improvements
+
+### Current Limitations
+- **VPNs/Proxies**: While fingerprinting helps, a determined user with multiple devices and rotating IPs could still bypass checks.
+- **Supabase Realtime Quotas**: The current implementation relies on public replication which has broadcast limits on free tiers.
+
+### Next Steps / Improvements
+- **CAPTCHA**: Implement hCaptcha or reCAPTCHA to prevent automated bot voting.
+- **Social Login**: Add OAuth (Google/GitHub) for poll creators for better UX.
+- **Canvas Fingerprinting**: Use more advanced browser entropy (Canvas/WebGL) for even more robust device identification.
+- **Analytics**: Add a dashboard for creators to see voting trends over time.
+- **Poll Expiry**: Add the ability to set a "Close Date" for polls.
+
+---
+
+## 📄 License
+MIT
